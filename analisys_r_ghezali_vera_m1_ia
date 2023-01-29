@@ -1,0 +1,753 @@
+#--------------------------------------Master1---IASchool--------------------------------------#
+#Nom : GHEZALI Amina
+#Nom : VERA COSIO Ray Leonardo
+--------------------------------------------------------------------------------------
+#!Ignorez les fautes d'orthographe car, dans les lignes de code, nous evitons de 
+#mettre des caracteres speciaux comme accents, pour eviter les erreurs de code lors du test.
+----------------------------------------------------------------------------------------
+
+#------Installer les packages suivants : 
+#install.packages("carData")
+#install.packages("car")
+#install.packages("ggplot2")
+#install.packages("lm.beta")
+#install.packages("gridExtra")
+#install.packages("vcd")
+#install.packages("GGally")
+#install.packages("performance")
+  
+
+#Librairies
+library(ggplot2)
+library(carData)
+library(car)
+library(corrplot)
+
+#--------------Importation du jeu de donnees depuis mon dossier-------------------------------#
+#--------Chargement de la databaskaggle_survey_2020_responses.csv-----------------------------#
+#--------N'oubliez pas de changer d'emplacement: readr::read_csv(file= ''header=TRUE, sep=',')
+#data <- read.table(file='C:/Users/amina/Desktop/R_Cours_TP/Projet_R/kaggle_survey_2020_responses.csv',header=TRUE, sep=',')
+data <- readr::read_csv('D:/GEMA IA SCHOOL/R cours/travailgroupe_mina/kaggle_survey_2020_responses.csv', show_col_types = FALSE)
+
+#--------View of database: 
+head(data)
+View(data)
+
+#--------Filtrage de la base de donnees :
+#La creation d'une nouvelle base de données avec les champs exerces dans notre étude du salaire hommes et femmes dans le monde en fonction de l'age ,domaine et l'expérience profétionelle
+database0<-data[,c("Q1","Q2","Q3","Q4","Q5","Q6","Q20","Q24")]
+
+#--------Nous verifions combien de fois nous trouvons la valeur de NA dans toute la matrice, juste pour avoir une idee generale.
+na_matrix <- is.na(database0)
+table(na_matrix)  # 20082 fois
+
+#--------Nous verifions combien de fois nous trouvons la valeur de NA au moins une fois par ligne.
+num_rows_with_true <- sum(apply(na_matrix, 1, any))
+num_rows_with_true # 9307 lignes avec au moins 1 NA
+#--------On calcule le pourcentage que cela represente
+dim(na_matrix)[1]  #nom des lignes 20037
+(num_rows_with_true * 100 / dim(na_matrix)[1]) # 46.44907 % de lignes avec au moins 1 NA
+#--------Conclusion sur le pourcentage des donnees NA---------#
+#46 % des lignes contiennent au moins 1 NA, donc c'est une chiffre important.
+#La qualite des donnees est un facteur important à prendre en compte lors de la realisation
+#d'analyses statistiques. Lors du nettoyage de la base de donnees, il est important de garder 
+#a l'esprit que la suppression de donnees peut affecter les resultats finaux. 
+#Nous utiliserons un critère de detection des valeurs aberrantes pour nous assurer que la 
+#suppression des donnees n'est pas trop importante et n'affecte pas de maniere significative 
+#la représentativite de l'echantillon. 
+#Nous avons donc decide d'utiliser Boxplots: les valeurs aberrantes apparaitront sous forme 
+#de points en dehors de la boîte.
+
+
+#--------Ici nous allons changer de variable pour simplifier les manipulations
+DB<-database0
+View(DB)
+
+#--------Changer de nom aux colonnes
+colnames(DB)
+colnames(DB) <- c("Age","Sex","Pays","Diplome","Domaine","Experience_Prof","Taille_entreprise","Salaire")
+#---Effacer la premiere ligne du jeu de donnees, puisqu'il est inutile pour nous d'avoir la question
+DB <- DB[-1,]
+#--------Verification des modifications 
+View(DB)
+dim(DB) # 20036 lignes avec 8 colonnes
+
+#-----------CONVERTISSMENT DES VARIABLES AVEC DES CARACTERS VERS VARIABLES NUMERIQUES-----------#
+#---Nous allons vérifier qu'il y a des characteres qui nous perturbent comme: "+" , "<", "$"; entre autres
+#---Donc, notre but icic, c'est de nettoyer notre data
+#---De la même manière, nos colonnes de valeurs quantitatives ont des valeurs dans des intervalles, 
+#---notre deuxième objectif ici est de créer de nouvelles colonnes et avec la moyenne de ces intervalles.
+
+#----------- 1/ Convertir les chaines de caracteres en entiers POUR LA COLONNE AGE ------------#
+
+#D'abord on verifie la colonne 
+table(DB$Age)  # on verifie qu'on a des valeurs que nous perturbe
+
+# Effacer "+"
+DB$Age <- gsub("\\+","",DB$Age)
+
+#Separer les valuer s de "-"
+values_split <- strsplit(DB$Age, "-")
+
+#lapply() pour appliquer une fonction à chaque élément de la liste retournée par strsplit(). 
+# On utilise la fonction as.numeric() pour convertir chaque element en nombre
+values_numeric <- lapply(values_split, as.numeric)
+
+#Calcul de la moyenne
+mean_values <- as.integer(sapply(values_numeric, mean))
+
+#Creer un nov col et ajouter les donnnes
+DB <- cbind(DB, mean_values)
+
+#La création d'un enouvelle colonne 
+colnames(DB)[ncol(DB)] <- "Age_moyen"
+
+
+#on verifie changements 
+table(DB$Age_moyen)
+
+#-----------2/ Convertir les chaines de caractéres en entiers POUR LA COLONNE SEX------------#
+
+#D'abord on verifie la colonne 
+table(DB$Sex)
+
+# Nous allons filtrer notre colonne sex et on va rester avec Man et Woman pour faire un etude
+# plus pertinent aussi car le reste de valeurs represente que moins de 2 % de notre colonne.
+# comme nous pouvons le voir ci-dessous:
+
+sum(DB$Sex == "Prefer not to say")/length(DB$Sex)*100    #1.312637%
+sum(DB$Sex == "Prefer to self-describe")/length(DB$Sex)*100    #0.2695149%
+sum(DB$Sex == "Nonbinary")/length(DB$Sex)*100      #0.2595328%
+sum(DB$Sex == "Man")/length(DB$Sex)*100      #78.80315%
+sum(DB$Sex == "Woman")/length(DB$Sex)*100    #19.35516%
+
+#Nous allons filtrer notre DB et rester avec seulement Man et Woman
+DB <- subset(DB, !(Sex %in% c("Prefer not to say", "Prefer to self-describe", "Nonbinary")) )
+# Et on verifie que c'etait bien filtrE
+table(DB$Sex)
+
+#----------------- 3/ On verifie les colonnes Pays, Diplome et Domaine ------------------#
+table(is.na(DB$Pays)) # zero Na
+table(DB$Pays)
+table(is.na(DB$Diplome)) # 457 Na
+table(DB$Diplome)
+table(is.na(DB$Domaine)) # 719 Na
+table(DB$Domaine)
+
+# On remarque que sur la colonne Diplome c'est important d'avoir Na comme valeur, donc nous 
+# allons changer les valeurs NA pour "Sans Diplome" et aussi effacer "I prefer not to answer"
+DB <- subset(DB, !(Diplome %in% c("I prefer not to answer")))
+DB$Diplome <- ifelse(is.na(DB$Diplome), "Sans Diplome", DB$Diplome)
+# On verifie 
+table(DB$Diplome)
+
+# On remarque que sur la colonne Domaine c'est important d'avoir Na comme valeur, donc nous allons
+# changer les valeurs NA pour "Sans Emploi"
+DB$Domaine <- ifelse(is.na(DB$Domaine), "Sans Emploi", DB$Domaine)
+table(DB$Domaine)
+
+#----4/ Convertir les chaines de caractéres en entiers POUR LA COLONNE Experience_Prof----#-
+#d'abord on verifie la colonne 
+table(DB$Experience_Prof)
+table(is.na(DB$Experience_Prof))
+# On remarque que sur la colonne Experience_Prof c'est important d'avoir Na comme valeur, donc 
+# nous allons changer les valeurs NA pour "0" en entier et changer 'I have never written code' par "0"
+DB$Experience_Prof <- ifelse(is.na(DB$Experience_Prof), 0, DB$Experience_Prof)
+DB$Experience_Prof <- gsub("I have never written code",0,DB$Experience_Prof )
+
+#Effacer"years", "+" et "<"
+DB$Experience_Prof <- gsub("years","",DB$Experience_Prof )
+DB$Experience_Prof <- gsub("\\+","",DB$Experience_Prof)
+DB$Experience_Prof <- gsub("<","",DB$Experience_Prof )
+
+#On verifie nos données
+table(DB$Experience_Prof)
+
+#Separer les valuer s de "-"
+values_split <- strsplit(DB$Experience_Prof , "-")
+
+# lapply() pour appliquer une fonction a chaque element de la liste retournee par 
+# strsplit(). Utilisez la fonction as.numeric() pour convertir chaque 
+# element en nombre
+
+values_numeric <- lapply(values_split, as.numeric)
+
+#Calcul de la moyenne
+mean_values <- as.integer(sapply(values_numeric, mean))
+
+#Creer un nov col et ajouter les donnnes
+DB <- cbind(DB, mean_values)
+
+#La création d'un enouvelle colonne 
+colnames(DB)[ncol(DB)] <- "Periode_experience"
+
+#On verifie notre nouvelle table Periode Experience
+table(DB$Periode_experience)
+table(is.na(DB$Periode_experience))
+View(DB)
+
+#----45/ Convertir les chaines de caractéres en entiers POUR LA COLONNE Taille_entreprise----#
+
+# D'abord on verifie la colonne 
+table(DB$Taille_entreprise)
+table(is.na(DB$Taille_entreprise))
+# On remarque que sur la colonne Taille_entreprise c'est important d'avoir Na comme valeur, donc nous allons
+# Changer les valeurs NA pour "0" en entier car les valeurs sans reponse represente plus de 70%
+#cela est possible en raison du manque de connaissances du travailleur ou du fait qu'il n'a pas d'emploi, 
+#donc pour l'instant nous le laisserons à 0 pour avoir une colonne d'entiers
+DB$Taille_entreprise <- ifelse(is.na(DB$Taille_entreprise), 0, DB$Taille_entreprise)
+
+
+# Effacer "employees"et "or more employees"
+
+DB$Taille_entreprise <- gsub("or more employees","",DB$Taille_entreprise)
+DB$Taille_entreprise <- gsub("employees","",DB$Taille_entreprise)
+DB$Taille_entreprise <- gsub(",","",DB$Taille_entreprise)
+
+# On verifie la colonne Taille_entreprise 
+table(DB$Taille_entreprise)
+
+# Separer les valuer s de "-"
+values_split <- strsplit(DB$Taille_entreprise, "-")
+
+# lapply() pour appliquer une fonction à chaque element de la liste retournee par 
+# strsplit(). Utilisez la fonction as.numeric() pour convertir chaque element en nombre
+values_numeric <- lapply(values_split, as.numeric)
+
+# Calcul de la moye
+mean_values <- as.integer(sapply(values_numeric, mean))
+
+# Creer un nov col et ajouter les donnnes
+DB <- cbind(DB, mean_values)
+
+# La création d'un enouvelle colonne 
+colnames(DB)[ncol(DB)] <- "Nombre_employeurs_ENTREPRISE"
+
+# On verifie notre nouvelle tableNombre_employeurs_ENTREPRISE
+table(DB$Nombre_employeurs_ENTREPRISE)
+table(is.na(DB$Nombre_employeurs_ENTREPRISE))
+View(DB)
+
+#------- 6/ Convertir les chaines de caractéres en entiers POUR LA COLONNE SALAIRE ---------#
+table(DB$Salaire)
+table(is.na(DB$Salaire))  # 8903 NA
+
+# On remarque que sur la colonne Salaire c'est important d'avoir Na comme valeur, donc nous allons
+# Changer les valeurs NA pour "0" en entier car les valeurs sans reponse represente plus de 85%
+# cela est possible en raison du plusieurs facteurs: sans emploie, arret de travail, permis de 
+# travail sans salaire ou encore le fait d'être discret sur son salaire donc pour l'instant nous
+# le laisserons à 0 pour avoir une colonne d'entiers
+DB$Salaire <- ifelse(is.na(DB$Salaire), 0, DB$Salaire)
+
+
+#Avec la methode d'efacer tous les caracteres du champs salaires et remplacer par le centre des intervals
+#effacer "," et "$" et ">"
+DB$Salaire <- gsub(",","",DB$Salaire)
+DB$Salaire <- gsub("\\$","",DB$Salaire)
+DB$Salaire <- gsub(">","",DB$Salaire)
+
+# On verifie la colonne Salaire 
+table(DB$Salaire)
+
+# Separer les valuer s de "-"
+values_split <- strsplit(DB$Salaire, "-")
+
+# lapply() pour appliquer une fonction à chaque élément de la liste retournée par strsplit(). Utilisez la fonction as.numeric() pour convertir chaque élément en nombre
+values_numeric <- lapply(values_split, as.numeric)
+
+# Calcul de la moyenne
+mean_values <- as.integer(sapply(values_numeric, mean))
+
+# Creer un nov col et ajouter les donnnes
+DB <- cbind(DB, mean_values)
+
+# La création d'un enouvelle colonne 
+colnames(DB)[ncol(DB)] <- "Salaire_moyen"
+
+# On verifie notre nouvelle table Salaire_moyen
+table(DB$Salaire_moyen)
+table(is.na(DB$Salaire_moyen))
+View(DB)
+
+#------------Enfin, nous vérifions toutes nos données, y compris les données modifiées
+# et les tables ajoutées
+str(DB) # 19313 obs. de  12 variables
+# on verifie que les colonnes :Age_moyen, Periode_experience, Nombre_employeurs_ENTREPRISE 
+# et Salaire_moyen sont des entiers et le reste des colonnes characteres
+
+
+# Verification des NA
+na_DB <- is.na(DB)
+table(na_DB)  # 0 fois 
+
+#----------------Etudes statitstiques prealables a la regression lineaire---------------------#
+# Age_moyen
+summary(DB$Age_moyen) #Min=19.00, 1st Qu=23.00, Median=27.00, Mean=30.94, 3rd Qu=30.94, Max.=70.00 
+boxplot.stats(DB$Age_moyen)
+#--------Representer graphiquement une boite a moustaches statistique-------------#
+#-------Boite a moustaches Age_moyen-------#
+ggplot(DB, aes(x = "", y = Age_moyen)) + geom_boxplot() + 
+  geom_text(aes(label = ..y..), position = position_dodge(width = 0.75), vjust = -0.5)+
+  ylab("Age_moyen")
+
+#-------Boite a moustaches Periode_experience-------#
+summary(DB$Periode_experience)
+boxplot.stats(DB$Periode_experience)
+#graph boite a moustache
+ggplot(DB, aes(x = "", y = Periode_experience)) + geom_boxplot() + 
+  geom_text(aes(label = ..y..), position = position_dodge(width = 0.75), vjust = -0.5)+
+  ylab("Periode_experience")
+
+#-------Boite a moustaches Nombre_employeurs_ENTREPRISE-------#
+summary(DB$Nombre_employeurs_ENTREPRISE)
+boxplot.stats(DB$Nombre_employeurs_ENTREPRISE)
+#graph boite a moustache
+ggplot(DB, aes(x = "", y = Nombre_employeurs_ENTREPRISE)) + geom_boxplot() + 
+  geom_text(aes(label = ..y..), position = position_dodge(width = 0.75), vjust = -0.5)+
+  ylab("Nombre_employeurs_ENTREPRISE")
+
+#-------Boite a moustaches Salaire_moyen -------#
+ 
+summary(DB$Salaire_moyen)
+boxplot.stats(DB$Salaire_moyen)
+#graph boite a moustache
+ggplot(DB, aes(x = "", y = Salaire_moyen)) + geom_boxplot() + 
+  geom_text(aes(label = ..y..), position = position_dodge(width = 0.75), vjust = -0.5)+
+  ylab("Salaire_moyen")
+
+
+#------------------II.Réalisation du modèle de régression linéaire-------------------------#
+
+#----------------------------------Régression simple---------------------------------------#
+
+#-------------------Décrire les relations statistiques------------------#
+#------------------Filtrage des donnees par rapport aux femmes-----------------------------#
+
+DBWOMAN<-DB[DB$Sex == 'Woman',]
+DBWOMAN
+
+# Le salaire max et min des femmes dans le monde en dollars :
+min(DBWOMAN$Salaire_moyen) #499 dollard 
+as.integer(max(DBWOMAN$Salaire_moyen)) #500000 dollard 
+
+# Les donnees statistiques de la base de donnees de chaque champs:
+summary(DBWOMAN)
+
+# L'etude du salaire des femmes par rapport a leur expériences profetionelles :
+Salmin<-DBWOMAN[DBWOMAN$Salaire_moyen == 499,]
+min(Salmin$Periode_experience) # 0 experiences 
+max(Salmin$Periode_experience) # 20 d'experiences 
+#remarque que malgrés l'expériences qui va de 1 à 15 ans or il ya des femmes payees à 499$ dans le domaine informatique 
+
+#L'etude du salaire des femmes par rapport à leur expériences profetionelles :
+Salmax<-DBWOMAN[DBWOMAN$Salaire_moyen > 26303,]
+length(Salmax)
+#D'aprés les résultas affichés on a que 12 femmes qui touchent 500000$ dans le monde d'aprés Les résultats enregistrés en 2020 sur la base de donées 
+
+
+#------------------Filtrage des donnees par rapport aux hommes-----------------------------#
+
+DBMAN<-DB[DB$Sex == 'Man',]
+DBMAN
+
+
+#le salaire max et min des hommess dans le monde en dollard :
+min(DBMAN$Salaire_moyen) #499 dollard 
+as.integer(max(DBMAN$Salaire_moyen)) #500000 dollard 
+
+#Les donnees statistiques de la base de donées de chaque champs:
+summary(DBMAN)
+
+#Letude du salaire des hommes par rapport à leur experiences profetionelles :
+Salrmin<-DBMAN[DBMAN$Salaire_moyen == 499,]
+min(Salrmin$Periode_experience) # 0 expériences 
+max(Salrmin$Periode_experience) # 20 d'expériences 
+#remarque que l'expériences qui va de 1 à 15 ans or il ya des hommes payées à 499$ dans le domaine informatique dans le monde 
+
+#L'etude du salaire des hommes par rapport à leur expériences profetionelles :
+Salrmax<-DBMAN[DBMAN$Salaire_moyen == 500000,]
+length(Salrmax)
+#D'apres les resultas affiches on remarque que il y a beaucoup d'hommes qui 
+#touchent 500000$ dans le monde d'apres les resultats enregistres en 2020
+#sur la base de donnees par rapport au nombre des femmes qui gagnent 500000$
+
+#-------------------test de student------------------#
+#---L'étude du salaire des femmes par rapport à leur expériences profetionelles :
+length(DB$Salaire_moyen[DB$Sex == 'Man'])
+length(DB$Salaire_moyen[DB$Sex == 'Woman'])
+
+#----comparer les deux moyennes pour déterminer si les résultats obtenus sont statistiquement significatifs ou s'ils sont dus au hasard.
+t.test(x=DB$Salaire_moyen[DB$Sex == 'Man'],y=DB$Salaire_moyen[DB$Sex == 'Woman'])
+#table d'analyse croisé
+table(DB$Sex, DB$Salaire_moyen)
+#representation graphitque de la table
+ggplot(DB, aes(x = Sex, y = Salaire_moyen, fill = Sex)) + geom_col()
+
+
+#---------coef de determination (R^2) ---------------#
+          
+
+DB_dummies <- model.matrix(~DB$Sex-1)
+model <- lm(DB$Salaire_moyen ~ DB_dummies)
+summary(model)$r.squared #0.007906188 tros bas
+
+
+#----------------------------------Regression Multiple---------------------------------------#
+#--Pour cette etude nous allons faire un etude dans les variables:
+#--Salaire_moyen vs Sex, Age_moyen,Pays, Diplome, Domaine, Periode_experience et Nombre_employeurs_ENTREPRISE
+
+#-----------------1. Décrire les relations statistique---------------------#
+# Pour évaluer une relation statistique entre plusieurs variables et une variable dépendante,
+# comme le salaire dans ce cas, il faut d'abord comprendre comment chacune des variables indépendantes affecte la variable dépendante.
+# on commence par l'analyse de la variance puis les resultats avec summary
+modelo_aov <- aov(Salaire_moyen ~ Sex + Age_moyen + Periode_experience + Nombre_employeurs_ENTREPRISE + Diplome + Domaine + Pays, data = DB)
+summary(modelo_aov)
+
+##Les résultats de l'ANOVA indiquent qu'il existe des différences significatives de salaire entre les groupes 
+#dans toutes les variables indépendantes à l'exception du Diplôme.
+#En particulier, la valeur "Pr(>F)" dans le tableau indique la probabilité d'obtenir une valeur F aussi élevée
+#ou supérieure due au hasard si l'hypothèse nulle d'égalité des moyennes est vraie. Une très petite valeur 
+#Pr(>F) (inférieure à 0,05) indique qu'il est très peu probable que la différence de moyenne soit due au hasard,
+#et nous pouvons donc rejeter l'hypothèse nulle et conclure qu'il existe de réelles différences entre les groupes.
+
+#----Ensuite on peut faire des tableu de contingence on installe le package vcd:    
+library(vcd)
+DB_clean <- na.omit(DB)
+DB_clean$Salaire_moyen <- as.numeric(DB_clean$Salaire_moyen)
+#-----"Salaire_moyen" vs, "Sex"
+contingency_table <- table(DB_clean$Salaire_moyen,DB_clean$Sex)
+print(contingency_table)
+mosaicplot(contingency_table, main = paste("Salaire_moyen vs", "Sex"))
+
+#-----"Salaire_moyen vs", "Age_moyen"
+contingency_table <- table(DB_clean$Salaire_moyen, DB_clean$Age_moyen)
+print(contingency_table)
+mosaicplot(contingency_table, main = paste("Salaire_moyen vs", "Age_moyen"))
+
+#-----"Salaire_moyen vs", "Diplome"
+contingency_table <- table(DB_clean$Salaire_moyen, DB_clean$Diplome)
+print(contingency_table)
+mosaicplot(contingency_table, main = paste("Salaire_moyen vs", "Diplome"))
+
+#-----"Salaire_moyen vs", "Periode_experience"
+contingency_table <- table(DB_clean$Salaire_moyen, DB_clean$Periode_experience)
+print(contingency_table)
+mosaicplot(contingency_table, main = paste("Salaire_moyen vs", "Periode_experience"))
+
+
+
+#--------Etudier les corrélations linéaires entre les variables explicatives------#
+library(GGally)
+ggpairs(DB) 
+
+ggpairs(DB, columns = c("Salaire_moyen","Sex","Age_moyen", "Diplome", "Periode_experience", "Nombre_employeurs_ENTREPRISE"))
+
+
+
+#------------2. Verifier les hypotheses de validite du modele de régression lineaire--------#
+#Dans notre cas, si notre objectif est de trouver une relation entre l'ecart 
+#salarial entre les hommes et les femmes, les variables independantes les plus
+#pertinentes seraient la variable "Sexe" et la variable "Age_moyen", puisque ce 
+#sont celles qui ont la valeur F la plus elevee .et ont un coefficient plus eleve 
+#dans le modele. Cependant, il est important de considerer également toute relation 
+#potentielle entre les variables indépendantes et les variables qualitatives.
+
+#Pour continuer la pertinence de l'etude, nous pourrions envisager d'inclure les variables
+#"Diplôome" et "Periode_experience" dans notre modele de régression lineaire. Ces deux variables
+#semblent avoir une forte relation avec la variable dependante "Salaire_moyen" comme on le voit
+#dans les graphiques de paires generes par ggpairs().
+#De plus, "Diplome" et "Periode_experience" pourraient etre importants pour expliquer
+#l'ecart salarial entre les hommes et les femmes car ils pourraient être liés à l'experience 
+#de travail et à l'education, des facteurs qui peuvent affecter le salaire.
+
+#---------------3. Valider le modèle de régression --------------------#
+
+#---Calculer la regresion multiple
+#---Convertir les variables qualitatives en dummies
+DB_test<-DB
+DB_test$Sex <- as.factor(DB_test$Sex)
+DB_test$Domaine <- as.factor(DB_test$Domaine)
+DB_test$Pays <- as.factor(DB_test$Pays)
+DB_test$Diplome <- as.factor(DB_test$Diplome)
+DB_test <- cbind(DB_test, model.matrix(~ Sex + Domaine + Pays + Diplome -1, data = DB_test))
+
+
+#----Etablir la regression lineaire multiple
+model <- lm(Salaire_moyen ~ Age_moyen + Periode_experience + Nombre_employeurs_ENTREPRISE + Sex + Domaine + Diplome + Pays, data = DB_test)
+
+#-----Resumen du model
+summary(model)
+
+library(performance)
+check_collinearity(model)
+#réalise un diagnostic de régression à l'aide de 6 graphiques, et qui permet d'évaluer
+#les hypothèses de linéarité, d'homoscédasticité et de normalité des résidus, ainsi que 
+#les multi-collinéarité et les valeurs influentes
+check_model(model) 
+
+
+
+#------------------------------ La presentation graphique----------------------------------------------------------:
+
+#---------------------------------------------Etude des cas des femmes ---------------------------------------------
+
+#1/Etude des salires des femmes en fonction de la periode dexperience dans le monde pour l'annee entre 2019 et 2022 :
+library(ggplot2)
+ggplot(DBWOMAN, aes(x = DBWOMAN$Periode_experience, y = DBWOMAN$Salaire_moyen)) +
+  geom_point() +
+  labs(x = "Experience proffetionel(Annees)", y = "Salaires mensuels($)") +
+  geom_smooth(method = "lm", se = FALSE)
+
+# Ajouter la droite de regression lineaire. 
+# Interpreter (Est-ce qu'il y a une correlation forte entre les donnees ?)
+model1=lm(DBWOMAN$Salaire_moyen~DBWOMAN$Periode_experience)
+plot(DBWOMAN$Periode_experience,DBWOMAN$Salaire_moyen, pch = 19, col = "red", main = "Nuage de points", xlab = "Experience",ylab = "Salaires")
+abline(model1,col="blue")
+
+# Lequation de la droite de regression lineaire pour estimer le salaire moyen d'une femme dans
+# le monde dans le domaine informatique :
+a=cov(DBWOMAN$Salaire_moyen,DBWOMAN$Periode_experiencePeriode_experience)/var(DBWOMAN$Periode_experience)
+a
+b=mean(DBWOMAN$Salaire_moyen)-a*mean(DBWOMAN$Periode_experience)
+b
+cat("lequation de la droite de la regression lineaire nous permet d'estimer le salaire moyen d'une femme qui exercant de l'activitÃ© dan sle domaine informatique dans le monde d'entier est : y = ",a,"* x +",b)
+
+# Explication du graphique :la representaion des donnees est tres sophistique, 
+# les points sont tres disperses,la droite de regression lineaire est a peine croissante:
+# alors les variables salaires  et pÃ©riode d'experiences  sont positivement correlees mais 
+# vu la dispersion elles sont faiblement correlees
+# A  partir du graphique:le modele est visiblement pas pertinent vu la presence des points aberrantes
+
+
+# Determiner   la     covariance  entre   les   variables salaires  et experiencess:  52963.68 
+cov(DBWOMAN$Salaire_moyen,DBWOMAN$Periode_experience)
+# la covariance est tres eleve donc la dispersion des observations est importante 
+# et elle est tres sensible aux valeurs extremes.
+
+# Determiner   le   coefficient  de   correlation: 0.3100646
+cor(DBWOMAN$Salaire_moyen,DBWOMAN$Periode_experience) 
+# le coefficient de correlation entre salaire et experiences est faible et positivement 
+#correlees
+
+# Calculer  le  coefficient  de  determination: 0.09614005
+summary(model1)$r.squared
+# le coefficient de determination est tres proche de 0 et il ne peut dÃ©terminer que 7% de 
+# variance  alors la qualite du modele est mediocre et il ne determine que 6,9% la distribution des points
+
+# Afficher   les   mesures  statistiques  pour   le   modele   lineaire   obtenu:
+summary(model1)
+
+#Analyser le modele lineaire sur le plan inferentiel en  interpretant  la valeur de p-value:  
+# 1/ Le modèle s'ajuste aux données, car la valeur de R-squared (coefficient de détermination) est 
+#de 0,09614, ce qui indique un ajustement modéré. La valeur ajustée de R-squared est de 0,0959,
+#ce qui indique que le modèle n'est pas surajusté.
+# 2/ L'erreur standard résiduelle est de 38380, ce qui indique que la différence entre les 
+#valeurs observées et les valeurs prédites du modèle est modérée
+# 3/ La valeur de la statistique F est de 404,5, avec une p-valeur de < 2.2e-16, ce qui 
+# indique que le modèle est statistiquement significatif.
+# 4/ En général, on peut en déduire qu'il existe une relation positive entre le temps 
+# d'expérience et le salaire moyen des femmes, et que le modèle est statistiquement significatif
+# pour expliquer cette relation.  
+
+
+
+#----- Evaluer les points qui exercent une grande influence
+# -----sur la régression afin de les écarter s'il s'agit de points potentiellement aberrants 
+# trouver les points aberrants avec cooks.distance
+influential_points <- cooks.distance(model1) > 4/nrow(DBWOMAN)
+# supprimer les valeurs aberrantes des données
+DBWOMAN_clean <- DBWOMAN[!influential_points, ]
+
+cor(DBWOMAN_clean$Salaire_moyen,DBWOMAN_clean$Periode_experience)
+
+# graphique après suppression de certaines valeurs aberrantes
+ggplot(DBWOMAN_clean, aes(x = DBWOMAN_clean$Periode_experience, y = DBWOMAN_clean$Salaire_moyen)) +
+  geom_point() +
+  labs(x = "Experience proffetionel(Annees)", y = "Salaires mensuels($)") +
+  geom_smooth(method = "lm", se = FALSE)
+
+
+#----------------------------------------La regression multiples pour femmes --------------------------------------------------------
+
+
+
+# Regression multiple des salaires des femmes dans le monde dans le domaine informatique:
+model2 <- lm(Salaire_moyen ~ Periode_experience + Age_moyen + Nombre_employeurs_ENTREPRISE, data = DBWOMAN)
+summary(model2)$r.squared
+
+#Afficher les mesures  statistiques de base pour le modele a laide de la commande summary.  
+summary(model2)
+
+#le modele global est plus pertinent que le modele simple vu l'augmentation du p-value
+
+
+#--------------Determiner la valeur de  VIF (variance dinflation  factor  )  
+# a  l'aide  de  la fonction   vif  afin  de tester la multi-colinearite  
+vif(model2)
+
+# Determiner  la matrice  de  correlation du  dataset
+DBWOMAN1=DBWOMAN[c(9,10,11,12)]
+DBWOMAN1
+mat_cor=cor(DBWOMAN1)
+mat_cor 
+#représentation graphique de la matrice de corrélation qui utilise des symboles
+# pour indiquer le degré de relation entre les variables.
+symnum(mat_cor, abbr.colnames=FALSE)
+
+#On fait la correlation avec corrplot 
+corrplot(mat_cor, method="number",order="hclust")
+
+#On remarque que le model est bien corrigÃ© le   modÃ¨le et pertinenet
+
+#le   VIF  du   modele2  
+car::vif(model2)
+# toutes les valeurs sont comprises entre 1 et 2 alors il y a une correlation moderee
+# entre la variable salaires et les autres variables explicatives pour le modele2
+# Determiner les coefficients centrees reduits ( les  Î²) a laide de la  fonction lm.beta  
+library(lm.beta)
+lm.beta(model2)
+
+# Utiliser  des intervalles de confiance a laide de la fonction confint  pour voir  pour   chaque   Î² 
+confint(model2)
+#Les valeurs estimees de chaque variable appartiennent bien a chaque intervalle de confiance 
+
+
+
+#----------------------------------Etude des cas des hommes ---------------------------------------------
+
+#1/Etude des salaires des hommes en fonction de la periode d'expÃ©rience dans le monde pour l'annÃ©e entre 2019 et 2022 et qui travaillent dan sle domaine informatique :
+library(ggplot2)
+ggplot(DBMAN, aes(x = DBMAN$Periode_experience, y = DBMAN$Salaire_moyen)) +
+  geom_point() +
+  labs(x = "ExpErience proffetionel(AnEes)", y = "Salaires monsuels($)") +
+  geom_smooth(method = "lm", se = FALSE) #--- on peut bien ajouter un titre pour differentier les deux graphiques des femmes et hommes 
+
+# Ajouter la droite de regression lineaire. Interpreter (Est-ce qu'il y a une correlation forte entre les donnees ?)
+model1=lm(DBMAN$Salaire_moyen~DBMAN$Periode_experience)
+plot(DBMAN$Periode_experience,DBMAN$Salaire_moyen, pch = 19, col = "brown", main = "nuage de points", xlab = "ExpÃ©rience",ylab = "Salaires")
+abline(model1,col="blue")
+
+#L'Ã©quation de la droite de regression lineaire pour estimer le salaire moyen d'une femme dans le monde dans le domaine informatique :
+a=cov(DBMAN$Salaire_moyen,DBMAN$Periode_experience)/var(DBMAN$Periode_experience)
+a
+b=mean(DBMAN$Salaire_moyen)-a*mean(DBMAN$Periode_experience)
+b
+cat("lequation de la droite de la regression lineaire nous permet d'estimer le salaire moyen d'une hommes qui exercant une activitÃ© dansle domaine informatique dans le monde d'entier est : y = ",a,"* x +",b)
+
+#Explication du graphique :la representation des donnees est tres sophistiquee , les points sont tres disperses,la droite de regression lineaire est a peine croissante:
+#alors les variables salaires  et periode d'eperiences  sont positivement correlees mais vu la dispersion elles sont faiblement correlees
+#a partir du graphique:le modele est visiblement pas pertinent vu la prÃ©sence des points aberrents
+
+
+# Determiner   la     covariance  entre   les   variables salaires  et experiences: 46027.92
+cov(DBMAN$Salaire_moyen,DBMAN$Periode_experience)
+# la covariance est trÃ¨s Ã©levÃ©e donc la dispersion des observations est importante et elle est tres sensible aux valeurs extremes.
+
+# Determiner   le   coefficient  de   correlation: 0.1416192
+cor(DBMAN$Salaire_moyen,DBMAN$Periode_experience) 
+# le coefficient de correlation entre salaire et expÃ©riences est proche de 0 alors elles sont faiblement et positivement correlees
+
+# Calculer  le  coefficient  de  determination: 0.02005601
+summary(model1)$r.squared
+# le coefficient de determination est tres proche de 0 et il ne peut dÃ©terminer que 7% de la variance  alors la qualitÃ© du modele est mediocre et il ne determine que 6,9% la distribution des points
+
+# Afficher   les   mesures  statistiques  pour   le   modele   lineaire   obtenu:
+summary(model1)
+
+
+#Analyser le modele lineaire sur le plan inferentiel en  interpretant  la valeur de p-value:  
+#1/le modele linÃ©aire est de qualite mediocre , il faut ajouter d'autres variables explicatives pour amÃ©liorer sa performance 
+#2/la   valeur  p-  value   de   la   variable   experience professionel:  
+# le p-value est infÃ©rieur a 2 "p-value: < 2.2e-16" donc on peut rejetter l'hypothÃ¨se nulle et on conclut que la variable experiences prof est statistiquement non significative.
+#On   propose   de   predire   les salaires    en   fonction   de   periode_expÃ©rience , Age_moyen et Nombre_employeurs_ENTREPRISE ) puis retablir un autre model de regression  .  
+
+
+#----------------------------------------La regression multiples pour hommes --------------------------------------------------------
+
+# Regression multiple des salaires des femmes dans le monde dans le domaine informatique:
+model2 <- lm(Salaire_moyen ~ Periode_experience + Age_moyen + Nombre_employeurs_ENTREPRISE, data = DBMAN)
+summary(model2)$r.squared
+
+#Afficher les mesures statistiques de base pour le modele a laide  de  la     commande   summary.  
+summary(model2)
+
+#le modele global est plus pertinent que le modele simple vu l'augmentation du p-value
+
+
+# Determiner la valeur de  VIF (variance dinflation  factor  )  a  laide  de  la fonction   vif  afin  de tester la multi-colinearite 
+vif(model2)
+
+# Determiner  la matrice  de  corrÃ©lation du  dataset/
+DBMAN1=DBMAN[c(9,10,11,12)]
+DBMAN1
+mat_cor=cor(DBMAN1)
+mat_cor 
+#représentation graphique de la matrice de corrélation qui utilise des symboles
+# pour indiquer le degré de relation entre les variables.
+symnum(mat_cor, abbr.colnames=FALSE)
+
+# On fait la correlation
+corrplot(mat_cor, method="number",order="hclust")
+#On remarque que le model est bien corrige le   modele et pertinenet
+
+#le   VIF  du   modÃ¨le2  
+car::vif(model2)
+# toutes les valeurs sont comprises entre 1 et 2 alors il y a une corrÃ©lation modÃ©rÃ©e entre la variable salaires et les autres variables explicatives pour le modÃ¨le2
+# DÃ©terminer les coefficients  centrees  reduits (les  Î²) a laide de la fonction lm.beta  
+library(lm.beta)
+lm.beta(model2)
+
+# Utiliser des intervalles de confiance a  laide de la fonction confint pour voir pour chaque Î² 
+confint(model2)
+#Les valeurs estimees de chaque variable appartiennent bien a chaque intervalle de confiance 
+
+
+#------------------------------------------La prediction en utilisant la fonction predict()----------------------------------
+
+# On va predire les salaires des femmes et des hommes qui exercent une activite dans le domaine informatique dans le monde entier avec de differentes tranche d'age:
+
+# Separer les donnees en fonction du sex femme et hommes :
+#DBWOMAN
+#DBMAN
+
+# Creer un modele de regression lineaire entre le salaire et les autres variables explicatives de la DATASET DBWOMAN
+modelwoman <- lm(Salaire_moyen ~ Periode_experience + Age_moyen + Nombre_employeurs_ENTREPRISE, data = DBWOMAN)
+
+# Utiliser la fonction predict pour effectuer des prÃ©dictions sur la DATASET DBMAN
+predictions <- predict(modelwoman, newdata = DBMAN)
+predictions
+
+#Dans ce graphique, vous pouvez comparer les prédictions du modèle (axe des x) 
+# avec les valeurs réelles (axe des y) des données.
+library(ggplot2)
+ggplot(data = DBMAN, aes(x = predictions, y = Salaire_moyen)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  ggtitle("Predicciones vs Salaire_moyen")
+
+# Créer le modèle de régression
+model <- lm(Salaire_moyen ~ Age_moyen + Periode_experience + Nombre_employeurs_ENTREPRISE, data=DBMAN)
+
+# Imprimer le résumé du modèle
+summary(model)
+
+
+#-------------------------------------------Conclusion---------------------------------------#
+
+# On a cree un modele de regression lineaire pour predire les salaires des femmes qui travaillent
+# dansle domaine de l'informatique dans le monde en fonction de l'experience professionelle, 
+# l'age moyen et la taille de l'entreprise . Nous utilisons la fonction predict() pour 
+# effectuer une prÃ©diction sur une base de donnÃ©es qui touche au minimum 499$ et maximum 
+# 500000$ (je presise que elles ne sont pas nombreuses il ya 5 femmes dans le monde d'apres 
+# les informations qu'on a eu sur la jeu de donnees ).
+# La prediction obtenue est 700$ et 122150.9$ pour les profils superieurs. 
+
+# Cela signifie que notre modÃ¨le prÃ©voit une augmentation de slaires de les femmes en se basant
+# sur les donnees de la base "DBWOMAN" que nous avons utilisÃ©es pour crÃ©er le modele. 
+# Cependant, il est important de noter que cette prediction n'est qu'une estimation et peut
+# ne pas refleter les salaires reels. Il est important de prendre en compte d'autres facteurs
+# tels que la situation du pays (les pays developees, les pays en guerre, situations culturels,
+# politiques, chomage, etc), la reputation et l'activite de l'entreprise,le nombre des femmes
+# dans le domaine informatique au sein de lentreprise ... pour obtenir une estimation plus
+# precise.
+
